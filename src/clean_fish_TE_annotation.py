@@ -69,7 +69,9 @@ def import_transposons(tes_input_path, te_annot_renamer, genome_name, logger):
             "Attribute": str,
         },
     )
-    # TODO add MAGIC notes here
+    # MAGIC
+    # This is specifically for these fish genomes. I
+    # don't care about the million scaffolds
     chromosomes_i_want = [
         "Chr01B",
         "Chr01A",
@@ -123,46 +125,29 @@ def import_transposons(tes_input_path, te_annot_renamer, genome_name, logger):
         "Chr25A",
     ]
 
+    # Filter on my chromosome whitelist
     TE_Data = TE_Data.loc[TE_Data["Chromosome"].isin(chromosomes_i_want)]
 
     # Create Order and SuperFamily column from Attribute column
     # Because that column contains the detailed TE information
     # Then remove old Attribute column
     TE_Data["Attribute"] = TE_Data["Attribute"].str.extract(r"Class=(.*?);")
-
     # NOTE fix early on in the pipeline because the SS genome creator decided
-    # to use their character for a delimiter in a TE name, not present in the
+    # to use their delimiter character in a TE name, not present in the
     # other two genomes. Normally this fix would be in the rename section but
     # the str split command below fails if there are more than one '/' in the
     # field.
     TE_Data.loc[TE_Data["Attribute"] == "DNA/EN/SPM", "Attribute"] = "DNA/EnSpm"
-
     TE_Data[["Order", "SuperFamily"]] = TE_Data.Attribute.str.split("/", expand=True)
-    # TE_Data[["Order", "SuperFamily", "Other"]] = TE_Data.Attribute.str.split(
-    # "/", expand=True
-    # )
-    # print(TE_Data["Other"].unique().tolist())
-    # raise ValueError
     TE_Data.drop(columns=["Attribute"], inplace=True)
     TE_Data.Order = TE_Data.Order.astype(str)
     TE_Data.SuperFamily = TE_Data.SuperFamily.astype(str)
 
-    # print(TE_Data)
-    # print(len(TE_Data["Chromosome"].unique().tolist()))
-    # print(len([x for x in TE_Data["Chromosome"].unique().tolist() if "Chr" in x]))
-    # print(len(TE_Data["Order"].unique().tolist()))
-    # print(len(TE_Data["SuperFamily"].unique().tolist()))
-    # Call renamer
-    # print()
-    # print(TE_Data["SuperFamily"].unique().tolist())
-    # print()
-    # NOTE this re-categorizes some TEs
+    # NOTE this re-categorizes many TEs
     TE_Data = te_annot_renamer(TE_Data)
 
-    # Declare data types
     TE_Data["Length"] = TE_Data.Stop - TE_Data.Start + 1
     check_nulls(TE_Data, logger)
-
     TE_Data.sort_values(by=["Chromosome", "Start"], inplace=True)
 
     return TE_Data
@@ -172,6 +157,11 @@ def te_annot_renamer(TE_Data):
     U = "Unknown_Order"
     master_order = {
         "Unknown": U,
+        # Rename the Order value for DNA orders to TIR to better conform to the
+        # Wicker naming system
+        "DNA": "TIR",
+        # Rename the RC Order to Helitron
+        "RC": "Helitron",
     }
 
     U = "Unknown_Superfam"
@@ -238,15 +228,22 @@ def te_annot_renamer(TE_Data):
         "ERV1": "ERV",
         "ERVL": "ERV",
         "ERVK": "ERV",
+        # Rename the PIF/Harbinger and IS2/3 elements to a superfamily of their own
+        "PIF-ISL2EU": "PHIS",
+        "PIF-Harbinger": "PHIS",
+        "IS3EU": "PHIS",
+        "PIF": "PHIS",
+        # Rename the Proto2 elements to be a part of RTE
+        # https://www.girinst.org/2009/vol9/issue7/Proto2-1_BF.html
+        "Proto2": "RTE",
     }
     # Invoke dictionary to fix names
     TE_Data.Order.replace(master_order, inplace=True)
     TE_Data.SuperFamily.replace(master_superfamily, inplace=True)
 
-    # NOTE additional custom changes begin now
-    # Rename the Order value for DNA orders to TIR to better conform to the
-    # Wicker naming system
-    TE_Data.loc[TE_Data.Order == "DNA", "Order"] = "TIR"
+    # The dictionary is the easiest way to rename things. But if you need to be
+    # more creative or set the value for the Order column based on the
+    # superfamily column, you can start using pandas loc notation.
 
     # If only the superfamily is None (unknown), and we DO know the order,
     # rewrite the superfamily to be unknown
@@ -262,9 +259,6 @@ def te_annot_renamer(TE_Data):
     # Rename the Order value for Penelope superfam to DIRS, they are not LINE
     TE_Data.loc[TE_Data.SuperFamily == "Penelope", "Order"] = "PLE"
 
-    # Rename the RC Order to Helitron
-    TE_Data.loc[TE_Data.Order == "RC", "Order"] = "Helitron"
-
     # For TEs that are unknown for both Order AND SuperFamily we will call
     # those 'Completely_Unknown'
     TE_Data.loc[
@@ -273,18 +267,9 @@ def te_annot_renamer(TE_Data):
         ["Order", "SuperFamily"],
     ] = "Completely_Unknown"
 
-    # Rename the PIF/Harbinger and IS2/3 elements to a superfamily of their own
-    TE_Data.loc[TE_Data.SuperFamily == "PIF-ISL2EU", "SuperFamily"] = "PHIS"
-    TE_Data.loc[TE_Data.SuperFamily == "PIF-Harbinger", "SuperFamily"] = "PHIS"
-    TE_Data.loc[TE_Data.SuperFamily == "IS3EU", "SuperFamily"] = "PHIS"
-    TE_Data.loc[TE_Data.SuperFamily == "PIF", "SuperFamily"] = "PHIS"
-
-    # Rename the Proto2 elements to be a part of RTE
-    # https://www.girinst.org/2009/vol9/issue7/Proto2-1_BF.html
-    TE_Data.loc[TE_Data.SuperFamily == "Proto2", "SuperFamily"] = "RTE"
-
-    # print("NOTE"), # this section is for help
-    # print(TE_Data["Order"].unique().tolist())
+    # This section is for help. You can use it to check your groups
+    # print("NOTE")
+    # print(sorted(TE_Data["Order"].unique().tolist()))
     # print(sorted(TE_Data["SuperFamily"].unique().tolist()))
     # print(len(TE_Data["SuperFamily"].unique().tolist()))
     # print()
