@@ -26,13 +26,6 @@ def check_nulls(my_df, logger):
         print((my_df[my_df.isnull().any(axis=1)][null_columns].head()))
 
 
-def write_cleaned_transposons(te_pandaframe, output_dir, genome_name, logger):
-    file_name = os.path.join(output_dir, ("Cleaned_" + genome_name + "_EDTA_TEs.tsv"))
-
-    logger.info("Writing cleaned TE file to: %s" % file_name)
-    te_pandaframe.to_csv(file_name, sep="\t", header=True, index=False)
-
-
 def import_transposons(tes_input_path, te_annot_renamer, genome_name, logger):
     """Import TE file and read as a dataframe in Pandas
 
@@ -53,36 +46,117 @@ def import_transposons(tes_input_path, te_annot_renamer, genome_name, logger):
         "Attribute",
     ]
 
+    # Drop extraneous columns
+    col_to_use = [
+        "Chromosome",
+        "Start",
+        "Stop",
+        "Attribute",
+    ]
+
     TE_Data = pd.read_csv(
         tes_input_path,
         sep="\t+",
         header=None,
         engine="python",
         names=col_names,
+        usecols=col_to_use,
         comment="#",
         dtype={
             "Start": "float64",
             "Stop": "float64",
             "Chromosome": str,
-            "Strand": str,
             "Attribute": str,
         },
     )
+    # TODO add MAGIC notes here
+    chromosomes_i_want = [
+        "Chr01B",
+        "Chr01A",
+        "Chr02B",
+        "Chr02A",
+        "Chr03B",
+        "Chr03A",
+        "Chr04B",
+        "Chr04A",
+        "Chr05B",
+        "Chr05A",
+        "Chr06B",
+        "Chr06A",
+        "Chr07B",
+        "Chr07A",
+        "Chr08B",
+        "Chr08A",
+        "Chr09B",
+        "Chr09A",
+        "Chr10B",
+        "Chr10A",
+        "Chr11B",
+        "Chr11A",
+        "Chr12B",
+        "Chr12A",
+        "Chr13B",
+        "Chr13A",
+        "Chr14B",
+        "Chr14A",
+        "Chr15B",
+        "Chr15A",
+        "Chr16B",
+        "Chr16A",
+        "Chr17B",
+        "Chr17A",
+        "Chr18B",
+        "Chr18A",
+        "Chr19B",
+        "Chr19A",
+        "Chr20B",
+        "Chr20A",
+        "Chr21B",
+        "Chr21A",
+        "Chr22B",
+        "Chr22A",
+        "Chr23B",
+        "Chr23A",
+        "Chr24B",
+        "Chr24A",
+        "Chr25B",
+        "Chr25A",
+    ]
 
-    # Drop extraneous columns
-    TE_Data.drop(columns=["Score", "Software", "Phase", "Feature"], inplace=True)
+    TE_Data = TE_Data.loc[TE_Data["Chromosome"].isin(chromosomes_i_want)]
 
     # Create Order and SuperFamily column from Attribute column
     # Because that column contains the detailed TE information
     # Then remove old Attribute column
-    TE_Data["Attribute"] = TE_Data["Attribute"].str.extract(r"Classification=(.*?);")
+    TE_Data["Attribute"] = TE_Data["Attribute"].str.extract(r"Class=(.*?);")
+
+    # NOTE fix early on in the pipeline because the SS genome creator decided
+    # to use their character for a delimiter in a TE name, not present in the
+    # other two genomes. Normally this fix would be in the rename section but
+    # the str split command below fails if there are more than one '/' in the
+    # field.
+    TE_Data.loc[TE_Data["Attribute"] == "DNA/EN/SPM", "Attribute"] = "DNA/EnSpm"
 
     TE_Data[["Order", "SuperFamily"]] = TE_Data.Attribute.str.split("/", expand=True)
+    # TE_Data[["Order", "SuperFamily", "Other"]] = TE_Data.Attribute.str.split(
+    # "/", expand=True
+    # )
+    # print(TE_Data["Other"].unique().tolist())
+    # raise ValueError
     TE_Data.drop(columns=["Attribute"], inplace=True)
     TE_Data.Order = TE_Data.Order.astype(str)
     TE_Data.SuperFamily = TE_Data.SuperFamily.astype(str)
 
+    # print(TE_Data)
+    # print(len(TE_Data["Chromosome"].unique().tolist()))
+    # print(len([x for x in TE_Data["Chromosome"].unique().tolist() if "Chr" in x]))
+    # print(len(TE_Data["Order"].unique().tolist()))
+    # print(len(TE_Data["SuperFamily"].unique().tolist()))
     # Call renamer
+    # print()
+    # print(TE_Data["SuperFamily"].unique().tolist())
+    # print()
+    # NOTE this re-categorizes some TEs
     TE_Data = te_annot_renamer(TE_Data)
 
     # Declare data types
@@ -91,143 +165,105 @@ def import_transposons(tes_input_path, te_annot_renamer, genome_name, logger):
 
     TE_Data.sort_values(by=["Chromosome", "Start"], inplace=True)
 
-    # MAGIC I only want the first 7
-    # MAGIC chromosome/scaffold names
-    # NOTE this is kind of bad form to be doing things this way, alternatively
-    # could provide some sort of input arg to handle the chromosomes I want but
-    # this is easiest to hard-code it in.
-    # NOTE chromosomes_i_want is a string variable that is set per genome and
-    # used to subset the dataframe by chromosome ID
-    if genome_name == "562":
-        # NOTE prepend a chromosome name to the integers of chromosome IDs
-        TE_Data["Chromosome"] = "562_scaffold_" + TE_Data["Chromosome"]
-        chromosomes_i_want = ["562_scaffold_" + str(i) for i in range(8)]
-
-    if genome_name == "2339":
-        # NOTE prepend a chromosome name to the integers of chromosome IDs
-        TE_Data["Chromosome"] = "2339_scaffold_" + TE_Data["Chromosome"]
-        chromosomes_i_want = ["2339_scaffold_" + str(i) for i in range(8)]
-
-    if genome_name == "H4":
-        # NOTE chromosome IDs already in a good format, just define range
-        chromosomes_i_want = ["Fvb" + str(i) for i in range(8)]
-
-    if genome_name == "502":
-        # NOTE prepend a chromosome name to the integers of chromosome IDs
-        TE_Data["Chromosome"] = "502_scaffold_" + TE_Data["Chromosome"]
-        chromosomes_i_want = ["502_scaffold_" + str(i) for i in range(8)]
-
-    TE_Data = TE_Data.loc[TE_Data["Chromosome"].isin(chromosomes_i_want)]
-    diagnostic(TE_Data)
     return TE_Data
-
-
-def diagnostic(TE_Data):
-    print(sorted(TE_Data["Order"].unique().tolist()))
-    print(sorted(TE_Data["SuperFamily"].unique().tolist()))
 
 
 def te_annot_renamer(TE_Data):
     U = "Unknown_Order"
     master_order = {
         "Unknown": U,
-        "MITE": "TIR",
-        "pararetrovirus": "pararetrovirus",
-        "DNA": "TIR",
     }
 
     U = "Unknown_Superfam"
     master_superfamily = {
-        # EDTA/Wicker et al 2007 renames to common name:
-        "RLC": "Copia",
-        "RLG": "Gypsy",
-        "RLB": "Bel_Pao",
-        "RLR": "Retrovirus",
-        "RLE": "ERV",
-        "RYD": "DIRS",
-        "RYN": "Ngaro",
-        "RYV": "VIPER",
-        "RPP": "Penelope",
-        "RIR": "R2",
-        "RIT": "RTE",
-        "RIJ": "Jockey",
-        "RIL": "L1",
-        "RII": "I",
-        "RST": "tRNA",
-        "RSL": "7SL",
-        "RSS": "5S",
-        "DTT": "Tc1-Mariner",
-        "DTA": "hAT",
-        "DTM": "Mutator",
-        "DTE": "Merlin",
-        "DTR": "Transib",
-        "DTP": "P",
-        "DTB": "PiggyBac",
-        "DTH": "PIF-Harbinger",
-        "DTC": "CACTA",
-        "DYC": "Crypton",
-        "DHH": "Helitron",
-        "DMM": "Maverick",
         # Custom changes
         "unknown": U,
         "Unknown": U,
         "None": U,
-        "EnSpm_CACTA": "CACTA",
-        "MuDR_Mutator": "Mutator",
-        "PIF_Harbinger": "PIF-Harbinger",
+        "U": U,
+        # "EnSpm_CACTA": "CACTA",
+        # "MuDR_Mutator": "Mutator",
+        # "PIF_Harbinger": "PIF-Harbinger",
+        # rename all of the hAT subtypes
+        "hAT-Ac": "hAT",
+        "hAT-Blackjack": "hAT",
+        "hAT-Charlie": "hAT",
+        "hAT-Tag1": "hAT",
+        "hAT-Tip100": "hAT",
+        "hAT-hAT5": "hAT",
+        "hAT-hobo": "hAT",
+        "hAT-hAT6": "hAT",
+        # Rename all of the TcMar subtypes
+        "TcMar-ISRm11": "Tc1_Mariner",
+        "Tc1-Mariner": "Tc1_Mariner",
+        "TcMar-Tigger": "Tc1_Mariner",
+        "TcMar": "Tc1_Mariner",
+        "TcMar-Tc2": "Tc1_Mariner",
+        "TcMar-Tc4": "Tc1_Mariner",
+        "TcMar-Tc1": "Tc1_Mariner",
+        "TcMar-Fot1": "Tc1_Mariner",
+        # Rename all of the Crypton subtypes
+        "Crypton-A": "Crypton",
+        "Crypton-V": "Crypton",
+        # Rename all of the Sola subtypes
+        "Sola-1": "Sola",
+        "Sola-2": "Sola",
+        # Rename all of the L1 subtypes
+        "L1-Tx1": "L1",
+        # Rename all of the SINE subtypes
+        "5S-Deu-L2": "5S",
+        # Rename all of the Kolobok subtypes
+        "Kolobok-T2": "Kolobok",
+        # Rename all of the tRNA subtypes
+        "tRNA-L2": "tRNA",
+        "tRNA-RTE": "tRNA",
+        "tRNA-Core": "tRNA",
+        "tRNA-Core-RTE": "tRNA",
+        # Rename all of the RTE subtypes
+        "RTE-X": "RTE",
+        "RTE-BovB": "RTE",
+        # Rename all of the CMC subtypes
+        "CMC-EnSpm": "CMC",
+        "EnSpm": "CMC",
+        "CMC-Chapaev-3": "CMC",
+        "CACTA": "CMC",
+        # Rename all of the MULE subtypes
+        "MULE-MuDR": "MULE",
+        "MULE-NOF": "MULE",
+        # Rename all of the Academ subtypes
+        "Academ-1": "Academ",
+        # Rename all of the R2 subtypes
+        "R2-Hero": "R2",
+        # Rename all of the ERV subtypes
+        "ERV1": "ERV",
+        "ERVL": "ERV",
+        "ERVK": "ERV",
     }
-
-    TE_Data.SuperFamily.fillna(
-        value="Unknown_Superfam", inplace=True
-    )  # replace None w U
-
     # Invoke dictionary to fix names
     TE_Data.Order.replace(master_order, inplace=True)
     TE_Data.SuperFamily.replace(master_superfamily, inplace=True)
 
-    # Rename the superfamily value for pararetros as pararetrovirus
-    TE_Data.loc[TE_Data.Order == "pararetrovirus", "SuperFamily"] = "pararetrovirus"
+    # NOTE additional custom changes begin now
+    # Rename the Order value for DNA orders to TIR to better conform to the
+    # Wicker naming system
+    TE_Data.loc[TE_Data.Order == "DNA", "Order"] = "TIR"
 
-    # Rename unknown LINE element superfamilies to Unknown_LINE_Superfam to
-    # distinguish between other unknowns
+    # If only the superfamily is None (unknown), and we DO know the order,
+    # rewrite the superfamily to be unknown
     TE_Data.loc[
-        (TE_Data.Order == "LINE") & (TE_Data["SuperFamily"] == "Unknown_Superfam"),
-        "SuperFamily",
-    ] = "Unknown_LINE_Superfam"
+        (TE_Data["Order"] != "Unknown_Order") & (TE_Data["SuperFamily"] == "None"),
+        ["SuperFamily"],
+    ] = "Unknown_Superfam"
 
-    # Remove 'Maverick' TEs from plant genome
-    TE_Data = TE_Data.drop(TE_Data[TE_Data.Order == "Maverick"].index)
+    # Rename the Order value for DIRS superfams to DIRS, they are not LTR
+    TE_Data.loc[TE_Data.SuperFamily == "Ngaro", "Order"] = "DIRS"
+    TE_Data.loc[TE_Data.SuperFamily == "DIRS", "Order"] = "DIRS"
 
-    # Rename unknown LTR element superfamilies to Unknown_LTR_Superfam to
-    # distinguish between other unknowns
-    TE_Data.loc[
-        (TE_Data["Order"] == "LTR") & (TE_Data["SuperFamily"] == "Unknown_Superfam"),
-        "SuperFamily",
-    ] = "Unknown_LTR_Superfam"
+    # Rename the Order value for Penelope superfam to DIRS, they are not LINE
+    TE_Data.loc[TE_Data.SuperFamily == "Penelope", "Order"] = "PLE"
 
-    # Rename unknown TIR element superfamilies to Unknown_TIR_Superfam to
-    # distinguish between other unknowns
-    TE_Data.loc[
-        (TE_Data.Order == "TIR") & (TE_Data["SuperFamily"] == "Unknown_Superfam"),
-        "SuperFamily",
-    ] = "Unknown_TIR_Superfam"
-
-    # Rename both values for Helitron elements, so that 'Helitron' is
-    # both the Order and SuperFamily value
-    # Some Helitron elements were labeled 'DNA' in the Order location, this is
-    # technically correct but I prefer to differentiate the TIR DNA elements
-    # from DNA elements as a whole
-    TE_Data.loc[
-        (TE_Data["Order"] == "TIR") & (TE_Data["SuperFamily"] == "Helitron"),
-        ["Order", "SuperFamily"],
-    ] = "Helitron"
-    # If the Order is Helitron and the SuperFamily is unknown make the
-    # superfamily 'Helitron'
-    TE_Data.loc[
-        (TE_Data["Order"] == "Helitron")
-        & (TE_Data["SuperFamily"] == "Unknown_Superfam"),
-        "SuperFamily",
-    ] = "Helitron"
+    # Rename the RC Order to Helitron
+    TE_Data.loc[TE_Data.Order == "RC", "Order"] = "Helitron"
 
     # For TEs that are unknown for both Order AND SuperFamily we will call
     # those 'Completely_Unknown'
@@ -237,18 +273,23 @@ def te_annot_renamer(TE_Data):
         ["Order", "SuperFamily"],
     ] = "Completely_Unknown"
 
+    # Rename the PIF/Harbinger and IS2/3 elements to a superfamily of their own
+    TE_Data.loc[TE_Data.SuperFamily == "PIF-ISL2EU", "SuperFamily"] = "PHIS"
+    TE_Data.loc[TE_Data.SuperFamily == "PIF-Harbinger", "SuperFamily"] = "PHIS"
+    TE_Data.loc[TE_Data.SuperFamily == "IS3EU", "SuperFamily"] = "PHIS"
+    TE_Data.loc[TE_Data.SuperFamily == "PIF", "SuperFamily"] = "PHIS"
+
+    # Rename the Proto2 elements to be a part of RTE
+    # https://www.girinst.org/2009/vol9/issue7/Proto2-1_BF.html
+    TE_Data.loc[TE_Data.SuperFamily == "Proto2", "SuperFamily"] = "RTE"
+
+    # print("NOTE"), # this section is for help
+    # print(TE_Data["Order"].unique().tolist())
+    # print(sorted(TE_Data["SuperFamily"].unique().tolist()))
+    # print(len(TE_Data["SuperFamily"].unique().tolist()))
+    # print()
+
     return TE_Data
-
-
-def diagnostic_cleaner_helper(TE_Data):
-    print()
-    print(TE_Data.Order.unique())
-    print(TE_Data.SuperFamily.unique())
-    print()
-
-    # To see unique for a given type:
-    # print(TE_Data.loc[TE_Data['Order'] == 'LINE'].SuperFamily.unique())
-    return None
 
 
 if __name__ == "__main__":
@@ -256,17 +297,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Reformat TE annotation file")
     path_main = os.path.abspath(__file__)
     dir_main = os.path.dirname(path_main)
-    output_default = os.path.join(dir_main, "../results")
     parser.add_argument(
         "TE_input_file", type=str, help="Parent path of TE annotation file"
     )
     parser.add_argument("genome_name", type=str, help="Name for the genome")
 
     parser.add_argument(
-        "--output_dir",
-        "-o",
+        "output_dir",
         type=str,
-        default=output_default,
         help="Parent directory to output results",
     )
 
@@ -286,6 +324,7 @@ if __name__ == "__main__":
     cleaned_transposons = import_transposons(
         args.TE_input_file, te_annot_renamer, args.genome_name, logger
     )
-    write_cleaned_transposons(
-        cleaned_transposons, args.output_dir, args.genome_name, logger
+    file_name = os.path.join(
+        args.output_dir, ("Cleaned_" + args.genome_name + "_TEs.tsv")
     )
+    cleaned_transposons.to_csv(file_name, sep="\t", header=True, index=False)
