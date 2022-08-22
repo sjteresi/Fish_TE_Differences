@@ -24,3 +24,10 @@ clean_TE_annotations:
 	python $(ROOT_DIR)/src/clean_fish_TE_annotation.py $(DEV_DATA)/Luciobarbus_capito/Luciobarbus_capito.TE.gff LC $(DEV_RESULTS)
 	python $(ROOT_DIR)/src/clean_fish_TE_annotation.py $(DEV_DATA)/Procypris_rabaudi/Procypris_rabaudi.TE.gff PR $(DEV_RESULTS)
 	python $(ROOT_DIR)/src/clean_fish_TE_annotation.py $(DEV_DATA)/Spinibarbus_sinensis/Spinibarbus_sinensis.TE.gff SS $(DEV_RESULTS)
+
+filter_gene_expression:
+	python $(ROOT_DIR)/src/filter_gene_expression.py \
+		$(DEV_DATA)/Luciobarbus_capito/Luciobarbus_capito.TPM.txt \
+		$(DEV_DATA)/Procypris_rabaudi/Procypris_rabaudi.TPM.txt \
+		$(DEV_DATA)/Spinibarbus_sinensis/Spinibarbus_sinensis.TPM.txt \
+		$(DEV_RESULTS)
