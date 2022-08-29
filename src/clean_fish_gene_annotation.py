@@ -51,6 +51,65 @@ def import_genes(genes_input_path):
         comment="#",
     )
 
+    # MAGIC
+    # This is specifically for these fish genomes. I
+    # don't care about the million scaffolds
+    chromosomes_i_want = [
+        "Chr01B",
+        "Chr01A",
+        "Chr02B",
+        "Chr02A",
+        "Chr03B",
+        "Chr03A",
+        "Chr04B",
+        "Chr04A",
+        "Chr05B",
+        "Chr05A",
+        "Chr06B",
+        "Chr06A",
+        "Chr07B",
+        "Chr07A",
+        "Chr08B",
+        "Chr08A",
+        "Chr09B",
+        "Chr09A",
+        "Chr10B",
+        "Chr10A",
+        "Chr11B",
+        "Chr11A",
+        "Chr12B",
+        "Chr12A",
+        "Chr13B",
+        "Chr13A",
+        "Chr14B",
+        "Chr14A",
+        "Chr15B",
+        "Chr15A",
+        "Chr16B",
+        "Chr16A",
+        "Chr17B",
+        "Chr17A",
+        "Chr18B",
+        "Chr18A",
+        "Chr19B",
+        "Chr19A",
+        "Chr20B",
+        "Chr20A",
+        "Chr21B",
+        "Chr21A",
+        "Chr22B",
+        "Chr22A",
+        "Chr23B",
+        "Chr23A",
+        "Chr24B",
+        "Chr24A",
+        "Chr25B",
+        "Chr25A",
+    ]
+
+    # Filter on my chromosome whitelist
+    gene_anno = gene_anno.loc[gene_anno["Chromosome"].isin(chromosomes_i_want)]
+
     # TODO check column names
 
     # rows in annotation
