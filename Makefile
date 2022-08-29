@@ -24,3 +24,31 @@ clean_TE_annotations:
 	python $(ROOT_DIR)/src/clean_fish_TE_annotation.py $(DEV_DATA)/Luciobarbus_capito/Luciobarbus_capito.TE.gff LC $(DEV_RESULTS)
 	python $(ROOT_DIR)/src/clean_fish_TE_annotation.py $(DEV_DATA)/Procypris_rabaudi/Procypris_rabaudi.TE.gff PR $(DEV_RESULTS)
 	python $(ROOT_DIR)/src/clean_fish_TE_annotation.py $(DEV_DATA)/Spinibarbus_sinensis/Spinibarbus_sinensis.TE.gff SS $(DEV_RESULTS)
+
+analyze_LC_syntelogs:
+	mkdir -p $(DEV_RESULTS)/LC/graphs
+	python $(ROOT_DIR)/src/analyze_syntelog_density.py \
+		$(DEV_DATA)/syntelogs.tsv \
+		LC \
+		$(DEV_RESULTS)/Cleaned_LC_Genes.tsv \
+		$(DEV_RESULTS)/LC/ \
+		$(DEV_RESULTS)/LC/graphs/
+
+analyze_PR_syntelogs:
+	mkdir -p $(DEV_RESULTS)/PR/graphs
+	python $(ROOT_DIR)/src/analyze_syntelog_density.py \
+		$(DEV_DATA)/syntelogs.tsv \
+		PR \
+		$(DEV_RESULTS)/Cleaned_PR_Genes.tsv \
+		$(DEV_RESULTS)/PR/ \
+		$(DEV_RESULTS)/PR/graphs/
+
+analyze_SS_syntelogs:
+	mkdir -p $(DEV_RESULTS)/SS/graphs
+	python $(ROOT_DIR)/src/analyze_syntelog_density.py \
+		$(DEV_DATA)/syntelogs.tsv \
+		SS \
+		$(DEV_RESULTS)/Cleaned_SS_Genes.tsv \
+		$(DEV_RESULTS)/SS/ \
+		$(DEV_RESULTS)/SS/graphs/
+
