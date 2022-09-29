@@ -25,49 +25,100 @@ clean_TE_annotations:
 	python $(ROOT_DIR)/src/clean_fish_TE_annotation.py $(DEV_DATA)/Procypris_rabaudi/Procypris_rabaudi.TE.gff PR $(DEV_RESULTS)
 	python $(ROOT_DIR)/src/clean_fish_TE_annotation.py $(DEV_DATA)/Spinibarbus_sinensis/Spinibarbus_sinensis.TE.gff SS $(DEV_RESULTS)
 
-analyze_LC_syntelogs_A:
-	python $(ROOT_DIR)/src/analyze_syntelog_density.py \
-		$(DEV_DATA)/syntelogs.tsv \
+clean : clean_gene_annotations clean_TE_annotations
+
+
+analyze_special_LC_A:
+	python $(ROOT_DIR)/src/analyze_special_syntelog_density.py \
 		$(DEV_DATA)/Kevin_Special_Gene_Set/Diploid_Polyploid_Syntelogs_HEB_For_Scotty.csv \
 		3 \
 		'Sub_A' \
 		LC \
 		$(DEV_RESULTS)/Cleaned_LC_Genes.tsv \
 		$(DEV_RESULTS)/LC/ \
+		$(ROOT_DIR)/config/config.ini \
 		$(DEV_RESULTS)/LC/graphs/
 
-analyze_LC_syntelogs_B:
-	python $(ROOT_DIR)/src/analyze_syntelog_density.py \
-		$(DEV_DATA)/syntelogs.tsv \
+analyze_special_LC_B:
+	python $(ROOT_DIR)/src/analyze_special_syntelog_density.py \
 		$(DEV_DATA)/Kevin_Special_Gene_Set/Diploid_Polyploid_Syntelogs_HEB_For_Scotty.csv \
 		3 \
 		'Sub_B' \
 		LC \
 		$(DEV_RESULTS)/Cleaned_LC_Genes.tsv \
 		$(DEV_RESULTS)/LC/ \
+		$(ROOT_DIR)/config/config.ini \
 		$(DEV_RESULTS)/LC/graphs/
 
-analyze_PR_syntelogs_A:
-	python $(ROOT_DIR)/src/analyze_syntelog_density.py \
-		$(DEV_DATA)/syntelogs.tsv \
+
+analyze_special_PR_A:
+	python $(ROOT_DIR)/src/analyze_special_syntelog_density.py \
 		$(DEV_DATA)/Kevin_Special_Gene_Set/Diploid_Polyploid_Syntelogs_HEB_For_Scotty.csv \
 		3 \
 		'Sub_A' \
 		PR \
 		$(DEV_RESULTS)/Cleaned_PR_Genes.tsv \
 		$(DEV_RESULTS)/PR/ \
+		$(ROOT_DIR)/config/config.ini \
 		$(DEV_RESULTS)/PR/graphs/
 
-# TODO refactor
-analyze_SS_syntelogs:
-	# TODO rename the special gene set location and file
-	mkdir -p $(DEV_RESULTS)/SS/graphs
-	python $(ROOT_DIR)/src/analyze_syntelog_density.py \
-		$(DEV_DATA)/syntelogs.tsv \
+analyze_special_PR_B:
+	python $(ROOT_DIR)/src/analyze_special_syntelog_density.py \
 		$(DEV_DATA)/Kevin_Special_Gene_Set/Diploid_Polyploid_Syntelogs_HEB_For_Scotty.csv \
 		3 \
+		'Sub_B' \
+		PR \
+		$(DEV_RESULTS)/Cleaned_PR_Genes.tsv \
+		$(DEV_RESULTS)/PR/ \
+		$(ROOT_DIR)/config/config.ini \
+		$(DEV_RESULTS)/PR/graphs/
+
+analyze_special_SS_A:
+	python $(ROOT_DIR)/src/analyze_special_syntelog_density.py \
+		$(DEV_DATA)/Kevin_Special_Gene_Set/Diploid_Polyploid_Syntelogs_HEB_For_Scotty.csv \
+		3 \
+		'Sub_A' \
 		SS \
 		$(DEV_RESULTS)/Cleaned_SS_Genes.tsv \
 		$(DEV_RESULTS)/SS/ \
+		$(ROOT_DIR)/config/config.ini \
 		$(DEV_RESULTS)/SS/graphs/
 
+analyze_special_SS_B:
+	python $(ROOT_DIR)/src/analyze_special_syntelog_density.py \
+		$(DEV_DATA)/Kevin_Special_Gene_Set/Diploid_Polyploid_Syntelogs_HEB_For_Scotty.csv \
+		3 \
+		'Sub_B' \
+		SS \
+		$(DEV_RESULTS)/Cleaned_SS_Genes.tsv \
+		$(DEV_RESULTS)/SS/ \
+		$(ROOT_DIR)/config/config.ini \
+		$(DEV_RESULTS)/SS/graphs/
+
+analyze_all_special: analyze_special_LC_A analyze_special_LC_B analyze_special_PR_A analyze_special_PR_B analyze_special_SS_A analyze_special_SS_B
+
+regular:
+	# LC for now
+	python $(ROOT_DIR)/src/analyze_regular_syntelog_density.py \
+		$(DEV_DATA)/syntelogs.tsv \
+		LC \
+		$(DEV_RESULTS)/Cleaned_LC_Genes.tsv \
+		$(DEV_RESULTS)/LC/ \
+		$(ROOT_DIR)/config/config.ini \
+		$(DEV_RESULTS)/LC/graphs/
+	# PR
+	python $(ROOT_DIR)/src/analyze_regular_syntelog_density.py \
+		$(DEV_DATA)/syntelogs.tsv \
+		PR \
+		$(DEV_RESULTS)/Cleaned_PR_Genes.tsv \
+		$(DEV_RESULTS)/PR/ \
+		$(ROOT_DIR)/config/config.ini \
+		$(DEV_RESULTS)/PR/graphs/
+	# SS
+	python $(ROOT_DIR)/src/analyze_regular_syntelog_density.py \
+		$(DEV_DATA)/syntelogs.tsv \
+		SS \
+		$(DEV_RESULTS)/Cleaned_SS_Genes.tsv \
+		$(DEV_RESULTS)/SS/ \
+		$(ROOT_DIR)/config/config.ini \
+		$(DEV_RESULTS)/SS/graphs/

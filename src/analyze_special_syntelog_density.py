@@ -5,279 +5,34 @@ Analyze the TE density values of syntelogs in various genomes
 __author__ = "Scott Teresi"
 
 import pandas as pd
-from collections import namedtuple
+from collections import OrderedDict
 import argparse
 import os
 import logging
 import coloredlogs
 import numpy as np
 import re
+from configparser import ConfigParser
 
 from transposon.import_filtered_genes import import_filtered_genes
 from transposon.density_data import DensityData
 from transposon.gene_data import GeneData
 
+from src.fish_utils import (
+    get_gene_data_as_list,
+    add_hdf5_indices_to_gene_data_from_list_hdf5,
+    add_te_vals_to_gene_info_pandas_from_list_hdf5,
+    parse_analysis_config,
+)
+
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import seaborn as sns
 import scipy
+
 from statannotations.Annotator import Annotator
+
 import statsmodels
-from collections import OrderedDict
-
-
-def graph_barplot_density_differences(
-    values,
-    te_type,
-    window_val,
-    direction,
-    number_of_zeros,
-    genome_name_str,
-    genome_1,
-    genome_2,
-    output_dir,
-    logger,
-    display=False,
-    align="left",
-):
-    """
-    Plot a histogram of TE density differences between syntelog pairs
-
-    Args:
-        values (list): A list of values representing the TE density differences
-        between syntelog pairs
-
-        te_type (str): String representing the TE type being plotted
-
-        window_val (int): Integer representing the current window of which the
-        data is being plotted
-
-        direction (str): string representing whether or not the graphs are
-        coming from upstream or downstream TE density data
-
-        number_of_zeros ():
-
-        logger (logging.Logger): Object to log information to
-
-        display (boolean): Defaults to False, if True shows the plot upon
-        generation with the plt.show() command
-    """
-
-    # MAGIC, the bins to group density values for the histogram AND the values
-    # for the xticks on the xaxis
-
-    # NOTE could use linspace but I want the numbers to show up nice for the
-    # figure, so I had to hard-code
-    # tick_bins = np.linspace(-1.0, 1.0, num=21, endpoint=True).tolist()
-    tick_bins = [
-        -1.0,
-        -0.9,
-        -0.8,
-        -0.7,
-        -0.6,
-        -0.5,
-        -0.4,
-        -0.3,
-        -0.2,
-        -0.1,
-        0,
-        0.1,
-        0.2,
-        0.3,
-        0.4,
-        0.5,
-        0.6,
-        0.7,
-        0.8,
-        0.9,
-        1.0,
-    ]
-
-    plt.figure(figsize=(8, 6))
-    n, bins, patches = plt.hist(
-        values, bins=tick_bins, facecolor="blue", ec="black", alpha=0.5
-    )
-    plt.rcParams["xtick.labelsize"] = 7  # MAGIC set size of axis ticks
-    plt.ylabel("Number of Genes")
-    plt.xlabel("Difference in TE Density Values")
-
-    plt.title(
-        genome_1.replace("_", " Subgenome ")
-        + " - "
-        + genome_2.replace("_", " Subgenome ")
-    )  # MAGIC genome name order here, Be
-    # careful that it corresponds to your subtraction scheme
-
-    N = mpatches.Patch(
-        color=None,
-        alpha=0,
-        label="Total Plotted Genes: %s \nTE type: %s \nWindow: %s \nDirection: %s \nNo. 0 Differences: %s"
-        % (len(values), te_type, window_val, direction, str(number_of_zeros)),
-    )
-    plt.xticks(tick_bins)
-    plt.legend(handles=[N])
-
-    # Create a black vertical line at 0 for visual purposes
-    plt.axvline(x=0, color="black")
-
-    path = os.path.join(
-        output_dir,
-        "Barplot",
-        (
-            genome_name_str
-            + "_"
-            + te_type
-            + "_"
-            + str(window_val)
-            + "_"
-            + direction
-            + "_DensityDifferences.png"
-        ),
-    )
-    logger.info("Saving graph to: %s" % path)
-    os.makedirs(os.path.join(args.output_dir, "Barplot"), exist_ok=True)
-    plt.savefig(path, bbox_inches="tight")
-    if display:
-        plt.show()
-    plt.close()
-
-
-def read_syntelog_file(filepath, genome_name):
-    """
-    Read the syntelog file provided by collaborators as a pandas.DataFrame
-
-    Args:
-        filepath (str): String representing the filepath on disk.
-
-        genome_name (str): String repreenting the shorthand genome name. This
-        is used to subset the file with the appropriate columns so that we get
-        the right A and B subgenomes. Acceptable values provided by
-        args.genome_name
-
-    Returns:
-            syntelogs (pandas.DataFrame)
-                Index:
-                    RangeIndex
-                Columns:
-                    Name: genome_name + '_A': dtype, object
-                    Name: genome_name + '_B', dtype: object
-    """
-    # MAGIC column names inherent to the file
-    syntelogs = pd.read_csv(
-        filepath,
-        header=None,
-        sep="\t",
-        names=[
-            "Drop",
-            "LC_B",
-            "LC_A",
-            "Drop2",
-            "PR_B",
-            "PR_A",
-            "Drop3",
-            "SS_A",
-            "SS_B",
-        ],
-        usecols=["LC_B", "LC_A", "PR_B", "PR_A", "SS_A", "SS_B"],
-    )
-    cols_i_want = [genome_name + "_A", genome_name + "_B"]
-    syntelogs = syntelogs[cols_i_want]
-
-    # Remove the '.m1' string from the end
-    # NOTE, from now on use the replace syntax because the .strip can have
-    # weird unintended functionality
-    syntelogs = syntelogs.apply(lambda x: x.str.replace("\.m1", "", regex=True))
-
-    # Remove the genome name prefix, this is inherent to the input data
-    # MAGIC string split
-    syntelogs = syntelogs.apply(lambda x: x.str.split("_").str[1])
-
-    return syntelogs
-
-
-def get_gene_data_as_list(cleaned_genes):
-    """
-    Take a cleaned genes annotation file from TE Density
-    (import_filtered_genes) and break it into a list of GeneData objects by
-    chromosome ID. This is used to initialize all of the DensityData objects in
-    a list.
-
-    Args:
-        cleaned_genes (pandas.DataFrame)
-            Index:
-                Name: Gene_Name, strings of gene names
-            Columns:
-                Name: Chromosome, object
-                Name: Feature, object
-                Name: Start, float64
-                Name: Stop, float64
-                Name: Strand, object
-                Name: Length, float64
-
-    Returns:
-        genedata_list (list of GeneData)
-    """
-    # MAGIC group by column Chromosome
-    gene_dataframe_list = [
-        dataframe for k, dataframe in cleaned_genes.groupby("Chromosome")
-    ]
-
-    # MAGIC initialize GeneData iteratively using the magic unique chromosome
-    genedata_list = [
-        GeneData(dataframe, dataframe["Chromosome"].unique()[0])
-        for dataframe in gene_dataframe_list
-    ]
-    return genedata_list
-
-
-def add_hdf5_indices_to_gene_data_from_list_hdf5(cleaned_genes, list_processed_dd_data):
-    """
-    NOTE this could be refactored to DensityData... Others may find it useful
-    """
-    to_concat = []
-    for chrom, dataframe in cleaned_genes.groupby(["Chromosome"]):
-        for processed_dd_datum in list_processed_dd_data:
-            if processed_dd_datum.unique_chromosome_id == chrom:
-                x = processed_dd_datum.add_hdf5_indices_to_gene_data(dataframe)
-                to_concat.append(x)
-    gene_frame_with_indices = pd.concat(to_concat)
-    return gene_frame_with_indices
-
-
-def add_te_vals_to_gene_info_pandas_from_list_hdf5(
-    gene_frame_with_indices,
-    list_processed_dd_data,
-    te_group,
-    te_name,
-    direction,
-    window,
-    gene_name_col="Gene_Name",
-    chrom_col="Chromosome",
-    index_col="Index_Val",
-):
-    """
-    NOTE this could be refactored to DensityData...
-    This is a really bad 'wrapper' for a function.
-
-    """
-    to_concat = []
-    for chrom, dataframe in gene_frame_with_indices.groupby([chrom_col]):
-        for processed_dd_datum in list_processed_dd_data:
-            if processed_dd_datum.unique_chromosome_id == chrom:
-                x = processed_dd_datum.add_te_vals_to_gene_info_pandas(
-                    dataframe,
-                    te_group,
-                    te_name,
-                    direction,
-                    window,
-                    gene_name_col,
-                    chrom_col,
-                    index_col,
-                )
-                to_concat.append(x)
-    gene_frame_w_ind_te_vals = pd.concat(to_concat)
-
-    return gene_frame_w_ind_te_vals
 
 
 def read_special_gene_set(filepath, genome_name):
@@ -426,7 +181,6 @@ def gen_boxplot(
         print(f"{te_column_str} yields an empty dataframe: {cleaned_with_te_vals}")
         return None
 
-    # TODO rename variable
     melted_genes_w_te_data = pd.melt(
         cleaned_with_te_vals,
         id_vars=[bias_str + "_Gene", other + "_Gene"],
@@ -532,7 +286,7 @@ def gen_boxplot(
             + direction
             + "_"
             + args.bias_str
-            + "_DensityBoxPlot.png"
+            + "_DensityBoxPlot.svg"
         ),
     )
     os.makedirs(os.path.join(args.output_dir, "Boxplot", args.bias_str), exist_ok=True)
@@ -571,37 +325,6 @@ def fdr_correct_p_vals(p_val_dict):
         p_val_dict_corrected[name] = val
 
     return boolean_array, p_val_dict_corrected
-
-
-def add_te_vals_to_syntelogs(syntelogs, te_vals, genome_name):
-    """
-    Add TE information to the syntelog table, unique because of the format of
-    the syntelog table
-
-    Args:
-        syntelogs
-
-        te_vals
-
-        genome_name (
-    """
-    syntelogs_w_te_vals = syntelogs.merge(
-        te_vals,
-        how="inner",
-        left_on=genome_name + "_A",
-        right_on="Gene_Name",
-        suffixes=["_A", "_B"],
-    ).drop(columns=["Gene_Name"])
-
-    # Do again to get the B column
-    syntelogs_w_te_vals = syntelogs_w_te_vals.merge(
-        te_vals,
-        how="inner",
-        left_on=genome_name + "_B",
-        right_on="Gene_Name",
-        suffixes=["_A", "_B"],
-    ).drop(columns=["Gene_Name"])
-    return syntelogs_w_te_vals
 
 
 def gen_scatter(
@@ -674,7 +397,7 @@ def gen_scatter(
             + direction
             + "_"
             + bias_str
-            + "_DensityScatterPlot.png"
+            + "_DensityScatterPlot.svg"
         ),
     )
     plt.savefig(save_file_path)
@@ -684,12 +407,6 @@ def gen_scatter(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="")
-    parser.add_argument(
-        "syntelog_file",
-        type=str,
-        help="""syntelog file provided
-                        by collaborators""",
-    )
 
     parser.add_argument(
         "special_syntelog_file",
@@ -733,16 +450,23 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
+        "config_file",
+        type=str,
+        help="parent path of config file",
+    )
+
+    parser.add_argument(
         "output_dir",
         type=str,
         help="Parent directory to output results",
     )
     logger = logging.getLogger(__name__)
     args = parser.parse_args()
-    args.syntelog_file = os.path.abspath(args.syntelog_file)
     args.special_syntelog_file = os.path.abspath(args.special_syntelog_file)
     args.gene_data = os.path.abspath(args.gene_data)
     args.HDF5_dir = os.path.abspath(args.HDF5_dir)
+    args.output_dir = os.path.abspath(args.output_dir)
+    windows, directions, orders = parse_analysis_config(args.config_file)
 
     # NOTE this is kind of ugly, but I need the B subgenome if I supplied A as
     # an input arg, and vice versa, so:
@@ -755,9 +479,6 @@ if __name__ == "__main__":
 
     # -----------------------------------------------------------------------
     # Read and initialize various data
-
-    # Read the universal syntelog table
-    syntelogs = read_syntelog_file(args.syntelog_file, args.genome_name)
 
     # Read the special syntelogs table
     special_syntelogs, tissue_list = read_special_gene_set(
@@ -786,23 +507,14 @@ if __name__ == "__main__":
         cleaned_genes, processed_dd_data
     )
 
-    # MAGIC, just get the TE names, and windows for one density data,
-    # they correspond for all other density datas too
-    # This is used for both the special gene set and the regular gene set.
-    all_windows = processed_dd_data[0].window_list  # MAGIC
-    directions = ["Upstream", "Downstream"]
-    orders = processed_dd_data[0].order_list
-    # supers = processed_dd_data[0].super_list  # NB unused, only going to
-    # focus on the TE orders
-
     # MAGIC declare the full genome name so I have something nice to label my
     # figure axes with
     if args.genome_name == "LC":
         long_genome_name = "Luciocarpus capito"
     if args.genome_name == "PR":
-        long_genome_name = "Procypris_rabaudi"
+        long_genome_name = "Procypris rabaudi"
     if args.genome_name == "SS":
-        long_genome_name = "Spinibarbus_sinensis"
+        long_genome_name = "Spinibarbus sinensis"
 
     # -----------------------------------------------------------------------
     # Begin analysis of special genes
@@ -859,22 +571,14 @@ if __name__ == "__main__":
 
     # -----------------------------------------------------------------------
     # Begin graphing analysis of special genes
-    # TODO should this be put in a function?
 
     # NOTE, start to loop over windows, upstream/downstream, and TE orders and
     # use the TE Density HDF5 indices to grab the appropriate TE values.
     # Further in the loop we then graph
-    windows_i_want = [1000, 2500, 5000, 10000]  # MAGIC these are the windows we are
-    # using
-    orders_i_want = ["Total_TE_Density", "LTR", "TIR"]
     p_val_dict = OrderedDict()
-    for window in windows_i_want:
+    for window in windows:
         for direction in directions:
             for order in orders:
-                if order not in orders_i_want:
-                    # This is just to avoid generating graphs for the TE types
-                    # we don't really care about for this project.
-                    continue
 
                 # NOTE this is the string ID of the column that was added to the above pandas
                 # data frame, it represents the TE type, window, and direction
@@ -939,16 +643,19 @@ if __name__ == "__main__":
 
     # FDR correct the pvalues
     # The dictionary preserves order when using the Ordered Dict
-    boolean_sig_array, p_val_dict_corrected = fdr_correct_p_vals(p_val_dict)
+    # boolean_sig_array, p_val_dict_corrected = fdr_correct_p_vals(p_val_dict)
+
+    # NOTE we decided not to FDR correct the p-values because we are not doing
+    # all of the windows or a bunch of TE types. If that decision changes, use
+    # the above code. NOTE the above code is kind of unneeded because we don't
+    # need to pre-generate the pvalues and FDR correct them. But I do not have
+    # the time to refactor the code to be less repetitive.
+    p_val_dict_corrected = p_val_dict
 
     # NOTE, RESTART the loop to actually make the graphs this time
-    for window in windows_i_want:
+    for window in windows:
         for direction in directions:
             for order in orders:
-                if order not in orders_i_want:
-                    # This is just to avoid generating graphs for the TE types
-                    # we don't really care about for this project.
-                    continue
 
                 # NOTE this is the string ID of the column that was added to the above pandas
                 # data frame, it represents the TE type, window, and direction
@@ -1025,62 +732,3 @@ if __name__ == "__main__":
                 )
 
     # End analysis of special genes
-    # -----------------------------------------------------------------------
-    # Begin analysis of regular genes
-    # TODO I should refactor this out because it only needs to be done once,
-    # not twice, once for the A set and once for the B set
-
-    # Do the loops to create graphs for the general set
-    for window in windows_i_want:
-        for direction in directions:
-            for order in orders_i_want:
-
-                # NOTE this is only for the orders. I could do it for the
-                # superfamilies but I don't think that is wanted or needed
-                cleaned_with_te_vals = add_te_vals_to_gene_info_pandas_from_list_hdf5(
-                    gene_frame_with_indices,
-                    processed_dd_data,
-                    "Order",
-                    order,
-                    direction,
-                    window,
-                )
-
-                # TODO edit this table to have a better docstring
-                syntelogs_w_te_vals = add_te_vals_to_syntelogs(
-                    syntelogs, cleaned_with_te_vals, args.genome_name
-                )
-
-                # MAGIC string formatting
-                # NOTE A genome MINUS B genome. Negative values means that the
-                # B copy had more TE
-                syntelogs_w_te_vals["Difference"] = (
-                    syntelogs_w_te_vals[
-                        order + "_" + str(window) + "_" + direction + "_A"
-                    ]
-                    - syntelogs_w_te_vals[
-                        order + "_" + str(window) + "_" + direction + "_B"
-                    ]
-                )
-
-                total_length = len(syntelogs_w_te_vals)
-
-                # NB subset to have only rows with a nonzero difference
-                syntelogs_w_te_vals = syntelogs_w_te_vals.loc[
-                    syntelogs_w_te_vals["Difference"] != 0
-                ]
-                number_of_zeros = total_length - len(syntelogs_w_te_vals)
-
-                graph_barplot_density_differences(
-                    syntelogs_w_te_vals["Difference"].to_list(),
-                    order,
-                    window,
-                    direction,
-                    number_of_zeros,
-                    args.genome_name,
-                    args.genome_name + "_A",
-                    args.genome_name + "_B",
-                    args.output_dir,
-                    logger,
-                    display=False,
-                )

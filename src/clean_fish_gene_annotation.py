@@ -15,7 +15,19 @@ def import_genes(genes_input_path):
     """Import genes file.
 
     Args:
-        TODO
+        genes_input_path (str): Filepath to the raw data
+
+    Returns:
+        gene_anno (pandas.DataFrame)
+            Index:
+                RangeIndex of genes
+            Columns:
+                Name: Chromosome, object
+                Name: Feature, object
+                Name: Start, float64
+                Name: Stop, float64
+                Name: Strand, object
+                Name: Length, float64
     """
 
     col_names = [
@@ -110,8 +122,6 @@ def import_genes(genes_input_path):
     # Filter on my chromosome whitelist
     gene_anno = gene_anno.loc[gene_anno["Chromosome"].isin(chromosomes_i_want)]
 
-    # TODO check column names
-
     # rows in annotation
     gene_anno = gene_anno[gene_anno.Feature == "gene"]  # drop non-gene rows
 
@@ -126,6 +136,8 @@ def import_genes(genes_input_path):
     gene_anno["Length"] = gene_anno.Stop - gene_anno.Start + 1
 
     gene_anno.sort_values(by=["Chromosome", "Start"], inplace=True)
+    print(gene_anno.info())
+    raise ValueError
     return gene_anno
 
 
