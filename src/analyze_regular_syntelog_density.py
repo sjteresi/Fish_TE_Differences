@@ -82,7 +82,7 @@ def read_syntelog_file(filepath, genome_name):
     return syntelogs
 
 
-def graph_barplot_density_differences(
+def graph_histogram_density_differences(
     values,
     te_type,
     window_val,
@@ -94,7 +94,6 @@ def graph_barplot_density_differences(
     output_dir,
     logger,
     display=False,
-    align="left",
 ):
     """
     Plot a histogram of TE density differences between syntelog pairs
@@ -149,11 +148,10 @@ def graph_barplot_density_differences(
         1.0,
     ]
 
-    plt.figure(figsize=(8, 6))
+    plt.figure(figsize=(9, 6))
     n, bins, patches = plt.hist(
         values, bins=tick_bins, facecolor="blue", ec="black", alpha=0.5
     )
-    plt.rcParams["xtick.labelsize"] = 7  # MAGIC set size of axis ticks
     plt.ylabel("Number of Genes")
     plt.xlabel("Difference in TE Density Values")
 
@@ -170,7 +168,7 @@ def graph_barplot_density_differences(
         label="Total Plotted Genes: %s \nTE type: %s \nWindow: %s \nDirection: %s \nNo. 0 Differences: %s"
         % (len(values), te_type, window_val, direction, str(number_of_zeros)),
     )
-    plt.xticks(tick_bins)
+    plt.xticks(tick_bins, fontsize=6.5)
     plt.legend(handles=[N])
 
     # Create a black vertical line at 0 for visual purposes
@@ -195,6 +193,7 @@ def graph_barplot_density_differences(
     plt.savefig(path, bbox_inches="tight")
     if display:
         plt.show()
+    plt.clf()
     plt.close()
 
 
@@ -314,7 +313,7 @@ if __name__ == "__main__":
                 ]
                 number_of_zeros = total_length - len(syntelogs_w_te_vals)
 
-                graph_barplot_density_differences(
+                graph_histogram_density_differences(
                     syntelogs_w_te_vals["Difference"].to_list(),
                     order,
                     window,
